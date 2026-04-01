@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# Virtual environments
+env/
+.venv/
+venv/
+ENV/
+
+# Django
+*.log
+local_settings.py
+*.sqlite3
+db.sqlite3
+media/
+staticfiles/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Test / coverage / type checking
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.pyre/
+.ruff_cache/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
