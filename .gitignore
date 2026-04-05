@@ -13,7 +13,7 @@ env/
 .venv/
 venv/
 ENV/
-
+feed.md
 # Django
 *.log
 local_settings.py
