@@ -1,280 +1,246 @@
-# 📘 PitWatch – PostGIS (Neon) + Django (No GDAL) Implementation Guide
+# 🛠 ONNX Model Integration with Django (PitWatch)
+
+## 📌 Overview
+
+This guide explains how to integrate an ONNX pothole detection model into a Django (DRF) backend.
+
+The model:
+
+* Takes an image as input
+* Returns a probability (0–1) indicating pothole presence
 
 ---
 
-## 🧠 Overview
+## 🧠 System Flow
 
-This guide shows how to integrate **PostGIS (NeonDB)** with a **Django + DRF backend** **WITHOUT using GeoDjango or GDAL**.
-
-### 🎯 Why This Approach?
-
-* ✅ No GDAL setup (simpler on Windows)
-* ✅ Faster development
-* ✅ Full PostGIS power via SQL
-* ✅ Ideal for API-based systems like PitWatch
+Client (React / Mobile)
+→ Upload Image
+→ Django API
+→ ONNX Inference
+→ Response (pothole + confidence)
+→ (Optional) Save to PostGIS
 
 ---
 
-## 🏗️ Architecture
+## ⚙️ Step 1: Install Dependencies
 
-```id="d4r8m1"
-Frontend (React / Map)
-        ↓
-Django REST Framework API
-        ↓
-Raw SQL / Django ORM
-        ↓
-NeonDB (PostgreSQL + PostGIS)
+```bash
+pip install onnxruntime opencv-python numpy pillow
 ```
 
 ---
 
-## ⚙️ Step 1: NeonDB Setup
+## 📂 Step 2: Project Structure
 
-### Enable PostGIS
-
-Run in Neon SQL Editor:
-
-```sql id="zz9k02"
-CREATE EXTENSION postgis;
 ```
-
-Verify:
-
-```sql id="bt5r5c"
-SELECT PostGIS_Version();
+your_project/
+ ├── your_app/
+ │    ├── services/
+ │    │    └── model.py
+ │    ├── views.py
+ │    ├── urls.py
+ ├── model/
+ │    └── pothole_model.onnx
 ```
 
 ---
 
-## 🐍 Step 2: Backend Setup
+## 🧩 Step 3: Model Loader (services/model.py)
 
-### Install Dependencies
+```python
+import onnxruntime as ort
+import numpy as np
+import cv2
 
-```bash id="8n7kq2"
-pip install django djangorestframework psycopg2-binary
+session = ort.InferenceSession("model/pothole_model.onnx")
+
+input_name = session.get_inputs()[0].name
+output_name = session.get_outputs()[0].name
+
+
+def preprocess_image(image):
+    image = cv2.resize(image, (224, 224))
+    image = image / 255.0
+    image = np.transpose(image, (2, 0, 1))
+    image = np.expand_dims(image, axis=0).astype(np.float32)
+    return image
+
+
+def predict(image):
+    input_tensor = preprocess_image(image)
+    outputs = session.run([output_name], {input_name: input_tensor})
+    probability = float(outputs[0][0])
+    return probability
 ```
 
 ---
 
-## ⚙️ Step 3: Configure Database
+## 🔌 Step 4: API Endpoint (views.py)
 
-```python id="gk3r8k"
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": "your_db",
-        "USER": "your_user",
-        "PASSWORD": "your_password",
-        "HOST": "ep-xxx.neon.tech",
-        "PORT": "5432",
-        "OPTIONS": {
-            "sslmode": "require",
-        },
-    }
-}
-```
-
----
-
-## 🧱 Step 4: Create Model (NO GeoDjango)
-
-```python id="q2m9rf"
-from django.db import models
-
-class PitReport(models.Model):
-    title = models.CharField(max_length=255)
-    description = models.TextField()
-    latitude = models.FloatField()
-    longitude = models.FloatField()
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return self.title
-```
-
----
-
-## 🛠️ Step 5: Run Migrations
-
-```bash id="mx0p2v"
-python manage.py makemigrations
-python manage.py migrate
-```
-
----
-
-## 🧪 Step 6: Insert Test Data
-
-```bash id="xztl4y"
-python manage.py shell
-```
-
-```python id="m7r8ab"
-from reports.models import PitReport
-
-PitReport.objects.create(
-    title="Road Pit",
-    description="Large pothole",
-    latitude=28.66,
-    longitude=77.45
-)
-```
-
----
-
-## 🔍 Step 7: Nearby Search API (Core Feature)
-
-### views.py
-
-```python id="c1v7pz"
-from django.db import connection
+```python
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+import numpy as np
+import cv2
+from .services.model import predict
 
-@api_view(["GET"])
-def nearby_reports(request):
-    lat = float(request.GET.get("lat"))
-    lng = float(request.GET.get("lng"))
 
-    with connection.cursor() as cursor:
-        cursor.execute("""
-            SELECT id, title,
-            ST_Distance(
-                ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography,
-                ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography
-            ) AS distance
-            FROM reports_pitreport
-            ORDER BY distance
-            LIMIT 10;
-        """, [lng, lat])
+@api_view(['POST'])
+def detect_pothole(request):
+    file = request.FILES.get('image')
 
-        rows = cursor.fetchall()
+    if not file:
+        return Response({"error": "No image uploaded"}, status=400)
 
-    data = [
-        {
-            "id": r[0],
-            "title": r[1],
-            "distance_m": float(r[2])
-        }
-        for r in rows
-    ]
+    file_bytes = np.asarray(bytearray(file.read()), dtype=np.uint8)
+    image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
-    return Response(data)
+    probability = predict(image)
+
+    return Response({
+        "pothole": probability > 0.5,
+        "confidence": probability
+    })
 ```
 
 ---
 
-## 🌐 Step 8: URL Routing
+## 🌐 Step 5: URL Configuration (urls.py)
 
-```python id="pj9qk3"
+```python
 from django.urls import path
-from .views import nearby_reports
+from .views import detect_pothole
 
 urlpatterns = [
-    path("nearby/", nearby_reports),
+    path('detect/', detect_pothole),
 ]
 ```
 
 ---
 
-## 📡 Example API Call
+## 🧪 Step 6: Testing API
 
-```id="xt0s9n"
-GET /api/nearby/?lat=28.66&lng=77.45
+```bash
+curl -X POST http://127.0.0.1:8000/api/detect/ \
+  -F "image=@test.jpg"
+```
+
+Response:
+
+```json
+{
+  "pothole": true,
+  "confidence": 0.82
+}
 ```
 
 ---
 
-## ⚡ Step 9: Radius Filtering (Important)
+## ⚡ Performance Optimizations
 
-```sql id="2q8m1z"
-WHERE ST_DWithin(
-    ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography,
-    ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography,
-    5000
-)
+### ✅ Load Model Once
+
+* Do NOT load model inside request
+* Keep global session object
+
+### ✅ Threshold Tuning
+
+```python
+pothole = probability > 0.5
 ```
 
-👉 5000 = 5km radius
+* 0.6 → more strict
+* 0.4 → more sensitive
 
----
+### ✅ Resize Based on Model
 
-## 🚀 Step 10: Add Index for Performance
+Check input shape:
 
-```sql id="7y6c4x"
-CREATE INDEX pitreport_geo_idx
-ON reports_pitreport
-USING GIST (
-    ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)
-);
+```python
+print(session.get_inputs()[0].shape)
 ```
 
 ---
 
-## 🧩 Step 11: Frontend Integration
+## 🗄 Step 7: Save to Database (Optional)
 
-* Use Leaflet / Mapbox
-* Fetch `/api/nearby/`
-* Plot markers using lat/lng
-* Optional:
+Only store valid potholes:
 
-  * clustering
-  * heatmaps
+```python
+if probability > 0.6:
+    save_to_db()
+```
 
----
+Recommended fields:
 
-## ⚠️ Common Issues
-
-| Issue             | Fix                   |
-| ----------------- | --------------------- |
-| Slow queries      | Add GIST index        |
-| Wrong distance    | Use `::geography`     |
-| SSL error         | Add `sslmode=require` |
-| Incorrect results | Ensure lng, lat order |
+* image
+* latitude
+* longitude
+* confidence
+* timestamp
 
 ---
 
-## 🧠 Best Practices
+## 🌍 Step 8: PostGIS Integration (Future)
 
-* Always store lat/lng as float
-* Use PostGIS functions for calculations
-* Limit query results (pagination)
-* Validate input coordinates
-
----
-
-## 🔥 Future Improvements
-
-* Add filtering (status, severity)
-* Pagination + sorting
-* Caching (Redis)
-* Real-time updates (Kafka optional)
-* Geo clustering on frontend
+* Store geolocation using PointField
+* Query nearby potholes
+* Cluster pothole regions
 
 ---
 
-## ✅ Final Checklist
+## 🚀 Deployment Notes
 
-* [ ] Neon DB ready
-* [ ] PostGIS enabled
-* [ ] Django connected
-* [ ] Model created
-* [ ] API working
-* [ ] Index added
+### Render (Free Tier)
+
+* Service sleeps after inactivity
+* Use uptime ping (GitHub Actions / cron)
+
+### Requirements.txt
+
+```
+onnxruntime
+opencv-python
+numpy
+pillow
+```
+
+---
+
+## ❗ Common Errors
+
+### Shape mismatch
+
+* Ensure correct resize (224x224 or model-specific)
+
+### Wrong color format
+
+* OpenCV uses BGR
+* Model may expect RGB
+
+Fix:
+
+```python
+image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+```
 
 ---
 
-## 🎯 Conclusion
+## 🔮 Next Improvements
 
-You now have a **clean, scalable, GDAL-free backend**:
-
-* ✅ NeonDB (serverless PostgreSQL)
-* ✅ PostGIS (geo queries)
-* ✅ Django + DRF (API layer)
-* ❌ No GeoDjango
-* ❌ No GDAL headaches
-
-Perfect for **PitWatch** 🚀
+* Add bounding box detection (if model supports)
+* Add async queue (Celery) for scaling
+* Integrate map visualization
+* Add clustering using PostGIS
 
 ---
+
+## ✅ Summary
+
+You now have:
+
+* ONNX model integrated into Django
+* API for pothole detection
+* Optimized inference pipeline
+
+Next step: connect with frontend + map system 🚀

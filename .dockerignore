@@ -1,0 +1,33 @@
+# VCS
+.git
+.gitignore
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.pytest_cache/
+.mypy_cache/
+
+# Local virtual environments
+env/
+.venv/
+venv/
+
+# Editor and OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Local env files (compose uses env_file at runtime)
+.env
+
+# Build/test artifacts
+*.log
+*.sqlite3
+coverage/
+htmlcov/

@@ -2,12 +2,15 @@ from django.core.cache import cache
 from django.db.models import Count, Q
 from django.db.models.functions import TruncDate
 from django.utils import timezone
+from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from reports.models import Report
 
 
 class DashboardSummaryView(APIView):
+    permission_classes = [IsAdminUser]
+
     def get(self, request, version=None):
         cache_key = "dashboard:summary:v1"
         cached = cache.get(cache_key)
