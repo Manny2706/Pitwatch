@@ -34,7 +34,7 @@ class AdminReportSerializer(serializers.ModelSerializer):
 
 class ReportListCreateView(APIView):
     def get(self, request, version=None):
-        qs = Report.objects.filter(user=request.user).order_by("-created_at")
+        qs = Report.objects.exclude(status=Report.STATUS_REJECTED).filter(user=request.user).order_by("-created_at")
         page_size = int(request.query_params.get("page_size", 25))
         page = int(request.query_params.get("page", 1))
         start = (page - 1) * page_size
@@ -122,11 +122,13 @@ class NearbyReportsView(APIView):
                            ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography
                        ) AS distance_m
                 FROM reports_report
-                WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND user_id = %s
+                WHERE latitude IS NOT NULL
+                  AND longitude IS NOT NULL
+                  AND status <> %s
                 ORDER BY distance_m
                 LIMIT %s
             """
-            params = [lng, lat, request.user.id, limit]
+            params = [lng, lat, Report.STATUS_REJECTED, limit]
         else:
             radius_m = radius_km * 1000
             query = """
@@ -138,7 +140,7 @@ class NearbyReportsView(APIView):
                 FROM reports_report
                 WHERE latitude IS NOT NULL
                   AND longitude IS NOT NULL
-                  AND user_id = %s
+                  AND status <> %s
                   AND ST_DWithin(
                       ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography,
                       ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography,
@@ -147,7 +149,7 @@ class NearbyReportsView(APIView):
                 ORDER BY distance_m
                 LIMIT %s
             """
-            params = [lng, lat, request.user.id, lng, lat, radius_m, limit]
+            params = [lng, lat, Report.STATUS_REJECTED, lng, lat, radius_m, limit]
 
         with connection.cursor() as cursor:
             cursor.execute(query, params)
