@@ -91,6 +91,8 @@ class AdminLoginView(APIView):
 					"username": user.username,
 					"email": user.email,
 					"is_superuser": user.is_superuser,
+					"refresh": str(refresh),
+					"access": str(access),
 				},
 			},
 			status=status.HTTP_200_OK,
