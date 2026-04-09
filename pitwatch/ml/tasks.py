@@ -5,7 +5,7 @@ from celery import shared_task
 from .models import InferenceJob, PotholeReport
 from .services.model import predict_from_bytes
 
-
+from reports.models import Report
 @shared_task(bind=True, name="ml.run_pothole_inference")
 def run_pothole_inference(self, image_b64: str) -> dict:
     job = InferenceJob.objects.filter(task_id=self.request.id).first()
