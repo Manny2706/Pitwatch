@@ -5,7 +5,9 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from .models import InferenceJob, PotholeReport
+from reports.models import Report
+
+from .models import InferenceJob
 from .services.model import InvalidImageError, PredictionError, predict_from_file
 from .tasks import run_pothole_inference
 
@@ -40,10 +42,32 @@ def submit_detect_pothole(request, version=None):
     if not image_file:
         return Response({"error": "No image uploaded"}, status=status.HTTP_400_BAD_REQUEST)
 
+    lat_raw = request.data.get("lat", request.data.get("latitude"))
+    lng_raw = request.data.get("lng", request.data.get("longitude"))
+
+    latitude = None
+    longitude = None
+    if lat_raw not in (None, ""):
+        try:
+            latitude = float(lat_raw)
+        except (TypeError, ValueError):
+            return Response({"error": "Invalid lat/latitude"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if lng_raw not in (None, ""):
+        try:
+            longitude = float(lng_raw)
+        except (TypeError, ValueError):
+            return Response({"error": "Invalid lng/longitude"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if latitude is not None and not (-90 <= latitude <= 90):
+        return Response({"error": "Latitude out of range"}, status=status.HTTP_400_BAD_REQUEST)
+    if longitude is not None and not (-180 <= longitude <= 180):
+        return Response({"error": "Longitude out of range"}, status=status.HTTP_400_BAD_REQUEST)
+
     try:
         image_bytes = image_file.read()
         image_b64 = base64.b64encode(image_bytes).decode("ascii")
-        task = run_pothole_inference.delay(image_b64)
+        task = run_pothole_inference.delay(image_b64, latitude, longitude)
         InferenceJob.objects.create(
             task_id=task.id,
             submitted_by=request.user,
@@ -90,13 +114,15 @@ def detect_status(request, task_id, version=None):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def my_pothole_reports(request, version=None):
-    reports = PotholeReport.objects.filter(user=request.user).order_by("-created_at")
+    reports = Report.objects.filter(user=request.user).order_by("-created_at")
     data = [
         {
-            "task_id": report.task_id,
-            "image_name": report.image_name,
-            "pothole": True,
-            "confidence": report.confidence,
+            "id": report.id,
+            "title": report.title,
+            "description": report.description,
+            "status": report.status,
+            "latitude": report.latitude,
+            "longitude": report.longitude,
             "created_at": report.created_at,
         }
         for report in reports

@@ -6,8 +6,10 @@ from .models import InferenceJob, PotholeReport
 from .services.model import predict_from_bytes
 
 from reports.models import Report
+
+
 @shared_task(bind=True, name="ml.run_pothole_inference")
-def run_pothole_inference(self, image_b64: str) -> dict:
+def run_pothole_inference(self, image_b64: str, latitude: float = None, longitude: float = None) -> dict:
     job = InferenceJob.objects.filter(task_id=self.request.id).first()
     if job:
         job.status = InferenceJob.STATUS_RUNNING
@@ -36,6 +38,17 @@ def run_pothole_inference(self, image_b64: str) -> dict:
                         "image_name": job.image_name,
                         "confidence": result["confidence"],
                     },
+                )
+                Report.objects.create(
+                    user_id=job.submitted_by_id,
+                    title=f"Pothole detected: {job.image_name or job.task_id}",
+                    description=(
+                        f"Auto-created from ML inference task {job.task_id}. "
+                        f"Confidence: {result['confidence']:.3f}"
+                    ),
+                    status=Report.STATUS_PENDING,
+                    latitude=latitude,
+                    longitude=longitude,
                 )
 
         return result

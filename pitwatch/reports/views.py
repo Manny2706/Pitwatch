@@ -1,5 +1,6 @@
 from django.db import connection
 from rest_framework import serializers, status
+from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -9,13 +10,31 @@ from .models import Report
 class ReportSerializer(serializers.ModelSerializer):
     class Meta:
         model = Report
-        fields = ["id", "title", "description", "status", "latitude", "longitude", "created_at"]
-        read_only_fields = ["id", "created_at"]
+        fields = ["id", "user", "title", "description", "status", "latitude", "longitude", "created_at"]
+        read_only_fields = ["id", "user", "created_at"]
+
+
+class AdminReportSerializer(serializers.ModelSerializer):
+    user = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Report
+        fields = ["id", "user", "title", "description", "status", "latitude", "longitude", "created_at"]
+
+    def get_user(self, obj):
+        if not obj.user:
+            return None
+        return {
+            "id": obj.user_id,
+            "username": obj.user.username,
+            "email": obj.user.email,
+            "is_staff": obj.user.is_staff,
+        }
 
 
 class ReportListCreateView(APIView):
     def get(self, request, version=None):
-        qs = Report.objects.all().order_by("-created_at")
+        qs = Report.objects.filter(user=request.user).order_by("-created_at")
         page_size = int(request.query_params.get("page_size", 25))
         page = int(request.query_params.get("page", 1))
         start = (page - 1) * page_size
@@ -36,8 +55,42 @@ class ReportListCreateView(APIView):
     def post(self, request, version=None):
         serializer = ReportSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        report = serializer.save()
+        report = serializer.save(user=request.user)
         return Response(ReportSerializer(report).data, status=status.HTTP_201_CREATED)
+
+
+class AdminReportListView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, version=None):
+        page_size_raw = request.query_params.get("page_size", 25)
+        page_raw = request.query_params.get("page", 1)
+
+        try:
+            page_size = max(1, min(int(page_size_raw), 100))
+            page = max(1, int(page_raw))
+        except ValueError:
+            return Response(
+                {"detail": "page and page_size must be valid integers."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        qs = Report.objects.select_related("user").all().order_by("-created_at")
+        start = (page - 1) * page_size
+        end = start + page_size
+
+        total = qs.count()
+        items = qs[start:end]
+        data = AdminReportSerializer(items, many=True).data
+        return Response(
+            {
+                "count": total,
+                "page": page,
+                "page_size": page_size,
+                "results": data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class NearbyReportsView(APIView):
@@ -69,11 +122,11 @@ class NearbyReportsView(APIView):
                            ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography
                        ) AS distance_m
                 FROM reports_report
-                WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+                WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND user_id = %s
                 ORDER BY distance_m
                 LIMIT %s
             """
-            params = [lng, lat, limit]
+            params = [lng, lat, request.user.id, limit]
         else:
             radius_m = radius_km * 1000
             query = """
@@ -85,6 +138,7 @@ class NearbyReportsView(APIView):
                 FROM reports_report
                 WHERE latitude IS NOT NULL
                   AND longitude IS NOT NULL
+                  AND user_id = %s
                   AND ST_DWithin(
                       ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography,
                       ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography,
@@ -93,7 +147,7 @@ class NearbyReportsView(APIView):
                 ORDER BY distance_m
                 LIMIT %s
             """
-            params = [lng, lat, lng, lat, radius_m, limit]
+            params = [lng, lat, request.user.id, lng, lat, radius_m, limit]
 
         with connection.cursor() as cursor:
             cursor.execute(query, params)
@@ -110,3 +164,30 @@ class NearbyReportsView(APIView):
             for r in rows
         ]
         return Response(data, status=status.HTTP_200_OK)
+
+
+class ReportStatusUpdateView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def patch(self, request, report_id, version=None):
+        report = Report.objects.filter(id=report_id).first()
+        if not report:
+            return Response({"detail": "Report not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        new_status = request.data.get("status")
+        if not new_status:
+            return Response({"detail": "status is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        allowed_statuses = [choice[0] for choice in Report.STATUS_CHOICES]
+        if new_status not in allowed_statuses:
+            return Response(
+                {
+                    "detail": "Invalid status.",
+                    "allowed_statuses": allowed_statuses,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        report.status = new_status
+        report.save(update_fields=["status"])
+        return Response(ReportSerializer(report).data, status=status.HTTP_200_OK)
