@@ -156,3 +156,18 @@ class AdminMeView(APIView):
 			},
 			status=status.HTTP_200_OK,
 		)
+
+class UserRefreshTokenView(APIView):
+	permission_classes = [AllowAny]
+
+	def post(self, request, version=None):
+		refresh_token = request.data.get("refresh_token")
+		if not refresh_token:
+			return Response({"detail": "Refresh token missing."}, status=status.HTTP_401_UNAUTHORIZED)
+
+		try:
+			refresh = RefreshToken(refresh_token)
+			new_access = str(refresh.access_token)
+		except TokenError:
+			return Response({"detail": "Invalid refresh token."}, status=status.HTTP_401_UNAUTHORIZED)
+		return Response({"access": new_access}, status=status.HTTP_200_OK)
