@@ -5,7 +5,7 @@ from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
+from rest_framework_simplejwt.authentication import JWTAuthentication, IsAuthenticated
 from .models import Report
 
 
@@ -171,9 +171,16 @@ class NearbyReportsView(APIView):
 
 
 class ReportStatusUpdateView(APIView):
-    permission_classes = [IsAdminUser]
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
 
     def patch(self, request, report_id, version=None):
+        if not request.user.is_superuser:
+            return Response(
+                {"detail": "Unauthorized. Superuser access required."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         report = Report.objects.filter(id=report_id).first()
         if not report:
             return Response({"detail": "Report not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -196,6 +203,8 @@ class ReportStatusUpdateView(APIView):
         
         if new_status == Report.STATUS_RESOLVED:
             report.resolved_at = timezone.now()
+        else:
+            report.resolved_at = None
         report.save(update_fields=["status", "resolved_at"])
         return Response(ReportSerializer(report).data, status=status.HTTP_200_OK)
 
