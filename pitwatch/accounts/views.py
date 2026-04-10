@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.contrib.auth import authenticate
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -15,8 +16,8 @@ def _set_auth_cookies(response, access_token, refresh_token):
 		value=access_token,
 		max_age=int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds()),
 		httponly=True,
-		secure=True,
-		samesite=None,
+		secure=settings.JWT_COOKIE_SECURE,
+		samesite=settings.JWT_COOKIE_SAMESITE,
 		path="/",
 	)
 	response.set_cookie(
@@ -24,15 +25,15 @@ def _set_auth_cookies(response, access_token, refresh_token):
 		value=refresh_token,
 		max_age=int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds()),
 		httponly=True,
-		secure=True,
-		samesite=None,
+		secure=settings.JWT_COOKIE_SECURE,
+		samesite=settings.JWT_COOKIE_SAMESITE,
 		path="/",
 	)
 
 
 def _clear_auth_cookies(response):
-	response.delete_cookie("access_token", path="/", samesite=None)
-	response.delete_cookie("refresh_token", path="/", samesite=None)
+	response.delete_cookie("access_token", path="/", samesite=settings.JWT_COOKIE_SAMESITE)
+	response.delete_cookie("refresh_token", path="/", samesite=settings.JWT_COOKIE_SAMESITE)
 
 
 class SignupView(APIView):
@@ -102,6 +103,40 @@ class AdminLoginView(APIView):
 		return response
 
 
+class UserLoginView(APIView):
+	permission_classes = [AllowAny]
+
+	def post(self, request, version=None):
+		username = request.data.get("username")
+		password = request.data.get("password")
+
+		if not username or not password:
+			return Response({"detail": "username and password are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+		user = authenticate(request=request, username=username, password=password)
+		if not user:
+			return Response({"detail": "Invalid credentials."}, status=status.HTTP_401_UNAUTHORIZED)
+
+		refresh = RefreshToken.for_user(user)
+		access = refresh.access_token
+
+		response = Response(
+			{
+				"detail": "Login successful.",
+				"user": {
+					"id": user.id,
+					"username": user.username,
+					"email": user.email,
+					"is_superuser": user.is_superuser,
+					"is_staff": user.is_staff,
+				},
+			},
+			status=status.HTTP_200_OK,
+		)
+		_set_auth_cookies(response, str(access), str(refresh))
+		return response
+
+
 class AdminTokenRefreshView(APIView):
 	permission_classes = [AllowAny]
 
@@ -122,8 +157,8 @@ class AdminTokenRefreshView(APIView):
 			value=new_access,
 			max_age=int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds()),
 			httponly=True,
-			secure=True,
-			samesite=None,
+			secure=settings.JWT_COOKIE_SECURE,
+			samesite=settings.JWT_COOKIE_SAMESITE,
 			path="/",
 		)
 		return response
@@ -192,7 +227,7 @@ class UserRefreshTokenView(APIView):
 	permission_classes = [AllowAny]
 
 	def post(self, request, version=None):
-		refresh_token = request.data.get("refresh_token")
+		refresh_token = request.COOKIES.get("refresh_token") or request.data.get("refresh_token")
 		if not refresh_token:
 			return Response({"detail": "Refresh token missing."}, status=status.HTTP_401_UNAUTHORIZED)
 
@@ -201,4 +236,15 @@ class UserRefreshTokenView(APIView):
 			new_access = str(refresh.access_token)
 		except TokenError:
 			return Response({"detail": "Invalid refresh token."}, status=status.HTTP_401_UNAUTHORIZED)
-		return Response({"access": new_access}, status=status.HTTP_200_OK)
+
+		response = Response({"detail": "Token refreshed."}, status=status.HTTP_200_OK)
+		response.set_cookie(
+			key="access_token",
+			value=new_access,
+			max_age=int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds()),
+			httponly=True,
+			secure=settings.JWT_COOKIE_SECURE,
+			samesite=settings.JWT_COOKIE_SAMESITE,
+			path="/",
+		)
+		return response
