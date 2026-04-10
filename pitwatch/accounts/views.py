@@ -157,6 +157,26 @@ class AdminMeView(APIView):
 			status=status.HTTP_200_OK,
 		)
 
+
+class UserLogoutView(APIView):
+	permission_classes = [AllowAny]
+
+	def post(self, request, version=None):
+		refresh_token = request.data.get("refresh_token") or request.COOKIES.get("refresh_token")
+		if refresh_token:
+			try:
+				refresh = RefreshToken(refresh_token)
+				refresh.blacklist()
+			except AttributeError:
+				# Blacklist app may not be enabled; logout should still clear client auth state.
+				pass
+			except TokenError:
+				return Response({"detail": "Invalid refresh token."}, status=status.HTTP_401_UNAUTHORIZED)
+
+		response = Response({"detail": "Logged out."}, status=status.HTTP_200_OK)
+		_clear_auth_cookies(response)
+		return response
+
 class UserRefreshTokenView(APIView):
 	permission_classes = [AllowAny]
 
