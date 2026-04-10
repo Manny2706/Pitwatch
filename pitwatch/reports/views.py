@@ -3,6 +3,8 @@ import os
 
 from django.db import connection
 from django.db.models import Count
+from django.core.validators import validate_email
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -452,7 +454,13 @@ class EmergencyView(APIView):
 
     def post(self, request, version=None):
         access_token = request.data.get("access_token")
-        recipient_mail = request.data.get("recipient_email")
+        recipient_mail = (
+            request.data.get("recipient_email")
+            or request.data.get("recipient_mail")
+            or request.data.get("email")
+            or ""
+        )
+        recipient_mail = str(recipient_mail).strip()
         if access_token:
             jwt_authenticator = JWTAuthentication()
             try:
@@ -463,13 +471,28 @@ class EmergencyView(APIView):
         else:
             user = None
 
-        latitude = request.data.get("latitude") or None
-        longitude = request.data.get("longitude") or None
+        latitude_raw = request.data.get("latitude")
+        longitude_raw = request.data.get("longitude")
         title = request.data.get("title", "Emergency Report") or "Emergency Report"
         description = request.data.get("description", "Emergency report") or "Emergency report"
 
-        if latitude is None or longitude is None:
+        if latitude_raw is None or longitude_raw is None:
             return Response({"detail": "latitude and longitude are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            latitude = float(latitude_raw)
+            longitude = float(longitude_raw)
+        except (TypeError, ValueError):
+            return Response({"detail": "latitude and longitude must be valid numbers."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+            return Response({"detail": "latitude/longitude out of range."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if recipient_mail:
+            try:
+                validate_email(recipient_mail)
+            except ValidationError:
+                return Response({"detail": "recipient_email is invalid."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Build a transient report object for notification payload only.
         report = Report(
@@ -479,10 +502,13 @@ class EmergencyView(APIView):
             status=Report.STATUS_PENDING,
             latitude=latitude,
             longitude=longitude,
+            road_authority="Emergency Contact",
+            road_authority_email=recipient_mail or None,
         )
         report.created_at = timezone.now()
 
         notification_sent = False
+        notification_error = None
         # Send mail to recipient if provided with location/details.
         if recipient_mail:
             authority_data = {
@@ -494,7 +520,8 @@ class EmergencyView(APIView):
             try:
                 send_authority_notification(report, authority_data)
                 notification_sent = True
-            except Exception:
+            except Exception as exc:
+                notification_error = str(exc)
                 logger.exception("Failed to send emergency notification")
 
         response_data = {
@@ -507,4 +534,6 @@ class EmergencyView(APIView):
             "notification_sent": notification_sent,
             "saved": False,
         }
+        if notification_error:
+            response_data["notification_error"] = notification_error
         return Response(response_data, status=status.HTTP_200_OK)
