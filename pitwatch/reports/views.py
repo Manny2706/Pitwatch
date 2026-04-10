@@ -77,7 +77,7 @@ def get_cluster_metadata(report):
         is_high_severity = cluster_count > POTHOLE_CLUSTER_THRESHOLD
         metadata = {
             "cluster_count": cluster_count,
-            "severity": "high" if is_high_severity else "normal",
+            "cluster_severity": "high" if is_high_severity else "normal",
             "is_high_severity": is_high_severity,
         }
         report._cluster_metadata = metadata
@@ -113,6 +113,7 @@ class ReportSerializer(serializers.ModelSerializer):
             "resolved_at",
             "road_authority",
             "road_authority_email",
+            "pothole_severity",
         ]
         read_only_fields = ["id", "user", "created_at"]
 
@@ -135,8 +136,9 @@ class AdminReportSerializer(serializers.ModelSerializer):
             "longitude",
             "created_at",
             "cluster_count",
-            "severity",
+            "cluster_severity",
             "is_high_severity",
+            "pothole_severity",
         ]
 
     def get_user(self, obj):
@@ -152,8 +154,8 @@ class AdminReportSerializer(serializers.ModelSerializer):
     def get_cluster_count(self, obj):
         return get_cluster_metadata(obj)["cluster_count"]
 
-    def get_severity(self, obj):
-        return get_cluster_metadata(obj)["severity"]
+    def get_cluster_severity(self, obj):
+        return get_cluster_metadata(obj)["cluster_severity"]
 
     def get_is_high_severity(self, obj):
         return get_cluster_metadata(obj)["is_high_severity"]
