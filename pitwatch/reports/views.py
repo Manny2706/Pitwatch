@@ -1,7 +1,8 @@
 from django.db import connection
+from django.db.models import Count
 from django.utils import timezone
 from rest_framework import serializers, status
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -197,3 +198,13 @@ class ReportStatusUpdateView(APIView):
             report.resolved_at = timezone.now()
         report.save(update_fields=["status", "resolved_at"])
         return Response(ReportSerializer(report).data, status=status.HTTP_200_OK)
+
+
+class GetCount(APIView):
+    # This endpoint is for the users to get counts of reports by status by them self
+    permission_classes = [AllowAny]
+
+    def get(self, request, version=None):
+        counts = Report.objects.filter(user=request.user).values("status").annotate(count=Count("id"))
+        data = {item["status"]: item["count"] for item in counts}
+        return Response(data, status=status.HTTP_200_OK)    
