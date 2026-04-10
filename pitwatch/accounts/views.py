@@ -147,7 +147,8 @@ class AdminTokenRefreshView(APIView):
 	permission_classes = [AllowAny]
 
 	def post(self, request, version=None):
-		refresh_token = request.COOKIES.get("refresh_token")
+    #  take refresh token in body 
+		refresh_token = request.COOKIES.get("refresh_token") or request.data.get("refresh_token")
 		if not refresh_token:
 			return Response({"detail": "Refresh token missing."}, status=status.HTTP_401_UNAUTHORIZED)
 
