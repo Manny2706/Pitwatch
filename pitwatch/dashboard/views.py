@@ -58,6 +58,7 @@ class DashboardSummaryView(APIView):
             resolved=Count("id", filter=Q(status=Report.STATUS_RESOLVED)),
             pending=Count("id", filter=Q(status=Report.STATUS_PENDING)),
             rejected=Count("id", filter=Q(status=Report.STATUS_REJECTED)),
+            in_progress=Count("id", filter=Q(status=Report.STATUS_IN_PROGRESS)),
         )
 
         since = timezone.now() - timezone.timedelta(days=7)
