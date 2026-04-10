@@ -15,8 +15,8 @@ def _set_auth_cookies(response, access_token, refresh_token):
 		value=access_token,
 		max_age=int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds()),
 		httponly=True,
-		secure=settings.JWT_COOKIE_SECURE,
-		samesite=settings.JWT_COOKIE_SAMESITE,
+		secure=True,
+		samesite=None,
 		path="/",
 	)
 	response.set_cookie(
@@ -24,15 +24,15 @@ def _set_auth_cookies(response, access_token, refresh_token):
 		value=refresh_token,
 		max_age=int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds()),
 		httponly=True,
-		secure=settings.JWT_COOKIE_SECURE,
-		samesite=settings.JWT_COOKIE_SAMESITE,
+		secure=True,
+		samesite=None,
 		path="/",
 	)
 
 
 def _clear_auth_cookies(response):
-	response.delete_cookie("access_token", path="/", samesite=settings.JWT_COOKIE_SAMESITE)
-	response.delete_cookie("refresh_token", path="/", samesite=settings.JWT_COOKIE_SAMESITE)
+	response.delete_cookie("access_token", path="/", samesite=None)
+	response.delete_cookie("refresh_token", path="/", samesite=None)
 
 
 class SignupView(APIView):
@@ -98,6 +98,7 @@ class AdminLoginView(APIView):
 			status=status.HTTP_200_OK,
 		)
 		_set_auth_cookies(response, str(access), str(refresh))
+
 		return response
 
 
@@ -121,8 +122,8 @@ class AdminTokenRefreshView(APIView):
 			value=new_access,
 			max_age=int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds()),
 			httponly=True,
-			secure=settings.JWT_COOKIE_SECURE,
-			samesite=settings.JWT_COOKIE_SAMESITE,
+			secure=True,
+			samesite=None,
 			path="/",
 		)
 		return response
