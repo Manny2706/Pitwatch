@@ -213,8 +213,7 @@ class ReportListCreateView(APIView):
 
         notification_sent = False
         try:
-            send_authority_notification(report, road_authority_data)
-            notification_sent = True
+            notification_sent = bool(send_authority_notification(report, road_authority_data))
         except Exception:
             logger.exception("Failed to send pothole report notification for report_id=%s", report.id)
 
@@ -518,11 +517,16 @@ class EmergencyView(APIView):
                 "tags": {},
             }
             try:
-                send_authority_notification(report, authority_data)
-                notification_sent = True
+                notification_sent = bool(send_authority_notification(report, authority_data))
+                if not notification_sent:
+                    notification_error = (
+                        "Notification was not sent. Check BREVO_API_KEY and BREVO_SENDER_EMAIL configuration."
+                    )
             except Exception as exc:
                 notification_error = str(exc)
                 logger.exception("Failed to send emergency notification")
+        else:
+            notification_error = "Notification was not sent because recipient_email was not provided."
 
         response_data = {
             "title": report.title,
@@ -536,4 +540,7 @@ class EmergencyView(APIView):
         }
         if notification_error:
             response_data["notification_error"] = notification_error
+            response_data["notification_message"] = "Emergency report accepted, but notification failed."
+        elif notification_sent:
+            response_data["notification_message"] = "Emergency notification sent successfully."
         return Response(response_data, status=status.HTTP_200_OK)
