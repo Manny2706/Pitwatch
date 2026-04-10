@@ -205,6 +205,10 @@ class GetCount(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, version=None):
-        counts = Report.objects.filter(user=request.user).values("status").annotate(count=Count("id"))
+        qs = Report.objects.all()
+        if request.user.is_authenticated:
+            qs = qs.filter(user=request.user)
+
+        counts = qs.values("status").annotate(count=Count("id"))
         data = {item["status"]: item["count"] for item in counts}
         return Response(data, status=status.HTTP_200_OK)    
