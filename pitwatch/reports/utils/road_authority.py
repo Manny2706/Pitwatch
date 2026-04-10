@@ -132,6 +132,7 @@ def build_authority_email_text(context):
         f"Longitude: {report.longitude}\n"
         f"Created At: {report.created_at}\n"
         f"Resolved At: {report.resolved_at or 'N/A'}\n"
+        f'Pothole Severity: {context["pothole_severity"]}\n'
         f"Road Authority: {report.road_authority or 'N/A'}\n"
         f"Road Authority Email: {report.road_authority_email or 'N/A'}\n"
         f"Reporter ID: {context['reporter_id']}\n"
@@ -224,6 +225,9 @@ def send_authority_notification(report, authority_data):
     text_content = build_authority_email_text(context)
 
     subject_prefix = "HIGH SEVERITY" if context.get("severity_badge") == "high" else "NEW"
+    pothole_severity = context.get("pothole_severity", "N/A")
+    if pothole_severity != "N/A":
+        subject_prefix += f" - {pothole_severity.upper()}"
     subject = f"PitWatch {subject_prefix} pothole report: {report.title}"
 
     return send_brevo_email(recipient, subject, html_content, text_content)
