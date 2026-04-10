@@ -28,6 +28,7 @@ class Report(models.Model):
     latitude = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         indexes = [
@@ -35,7 +36,9 @@ class Report(models.Model):
             models.Index(fields=["created_at"]),
             models.Index(fields=["user", "created_at"]),
             models.Index(fields=["latitude", "longitude"]),
+            models.Index(fields=["resolved_at"]),
         ]
+
 
     def __str__(self):
         return self.title

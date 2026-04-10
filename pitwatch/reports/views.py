@@ -1,4 +1,5 @@
 from django.db import connection
+from django.utils import timezone
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
@@ -189,7 +190,10 @@ class ReportStatusUpdateView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
+        
         report.status = new_status
-        report.save(update_fields=["status"])
+        
+        if new_status == Report.STATUS_RESOLVED:
+            report.resolved_at = timezone.now()
+        report.save(update_fields=["status", "resolved_at"])
         return Response(ReportSerializer(report).data, status=status.HTTP_200_OK)
