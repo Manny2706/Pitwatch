@@ -203,7 +203,7 @@ class ReportListCreateView(APIView):
         try:
             send_authority_notification(report, road_authority_data)
         except Exception:
-            pass
+            return Response("Report created but failed to send notification to road authority.", status=status.HTTP_201_CREATED)
 
         return Response(ReportSerializer(report).data, status=status.HTTP_201_CREATED)
 
