@@ -190,16 +190,15 @@ class ReportListCreateView(APIView):
     def post(self, request, version=None):
         serializer = ReportSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         latitude = serializer.validated_data.get("latitude")
         longitude = serializer.validated_data.get("longitude")
+        severity = serializer.validated_data.get("pothole_severity")
         existing_report = get_report_within_distance(latitude, longitude, meters=10)
         if existing_report:
             return Response(
                 {
                     "detail": "A report already exists within 10 meters of this location.",
                     "report": ReportSerializer(existing_report).data,
-                    
                 },
                 status=status.HTTP_200_OK,
             )
@@ -207,9 +206,10 @@ class ReportListCreateView(APIView):
         road_authority_data = get_road_authority(latitude, longitude)
         report = serializer.save(
             user=request.user,
-            pothole_severity=road_authority_data.get("severity"),
+            pothole_severity=severity,
             road_authority=road_authority_data.get("authority"),
             road_authority_email=road_authority_data.get("authority_email"),
+            
         )
 
         notification_sent = False
