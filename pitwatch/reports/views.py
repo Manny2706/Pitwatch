@@ -241,10 +241,12 @@ class AdminReportListView(APIView):
                     break
 
             if not is_duplicate_zone:
+                zone_cluster_count = get_pothole_cluster_count(report.latitude, report.longitude)
                 unique_high_severity_zones.append(
                     {
                         "latitude": report.latitude,
                         "longitude": report.longitude,
+                        "pothole_count": zone_cluster_count,
                     }
                 )
 
