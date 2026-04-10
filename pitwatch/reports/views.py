@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from .models import Report
-
+from .utils.road_authority import get_road_authority, send_authority_notification
 
 POTHOLE_CLUSTER_RADIUS_METERS = int(os.getenv("POTHOLE_CLUSTER_RADIUS_METERS", "130"))
 POTHOLE_CLUSTER_THRESHOLD = int(os.getenv("POTHOLE_CLUSTER_THRESHOLD", "8"))
@@ -98,7 +98,19 @@ def is_within_radius(lat1, lng1, lat2, lng2, meters):
 class ReportSerializer(serializers.ModelSerializer):
     class Meta:
         model = Report
-        fields = ["id", "user", "title", "description", "status", "latitude", "longitude", "created_at","resolved_at"]
+        fields = [
+            "id",
+            "user",
+            "title",
+            "description",
+            "status",
+            "latitude",
+            "longitude",
+            "created_at",
+            "resolved_at",
+            "road_authority",
+            "road_authority_email",
+        ]
         read_only_fields = ["id", "user", "created_at"]
 
 
@@ -170,7 +182,6 @@ class ReportListCreateView(APIView):
 
         latitude = serializer.validated_data.get("latitude")
         longitude = serializer.validated_data.get("longitude")
-        
         existing_report = get_report_within_distance(latitude, longitude, meters=10)
         if existing_report:
             return Response(
@@ -182,7 +193,18 @@ class ReportListCreateView(APIView):
                 status=status.HTTP_200_OK,
             )
 
-        report = serializer.save(user=request.user)
+        road_authority_data = get_road_authority(latitude, longitude)
+        report = serializer.save(
+            user=request.user,
+            road_authority=road_authority_data.get("authority"),
+            road_authority_email=road_authority_data.get("authority_email"),
+        )
+
+        try:
+            send_authority_notification(report, road_authority_data)
+        except Exception:
+            pass
+
         return Response(ReportSerializer(report).data, status=status.HTTP_201_CREATED)
 
 
