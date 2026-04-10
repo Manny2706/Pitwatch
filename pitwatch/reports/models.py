@@ -6,11 +6,13 @@ class Report(models.Model):
     STATUS_PENDING = "pending"
     STATUS_RESOLVED = "resolved"
     STATUS_REJECTED = "rejected"
+    STATUS_IN_PROGRESS = "in_progress"
 
     STATUS_CHOICES = [
         (STATUS_PENDING, "Pending"),
         (STATUS_RESOLVED, "Resolved"),
         (STATUS_REJECTED, "Rejected"),
+        (STATUS_IN_PROGRESS, "In Progress"),
     ]
 
     user = models.ForeignKey(
