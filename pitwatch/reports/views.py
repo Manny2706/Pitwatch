@@ -81,6 +81,20 @@ def get_cluster_metadata(report):
     return metadata
 
 
+def is_within_radius(lat1, lng1, lat2, lng2, meters):
+    query = """
+        SELECT ST_DWithin(
+            ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography,
+            ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography,
+            %s
+        )
+    """
+    with connection.cursor() as cursor:
+        cursor.execute(query, [lng1, lat1, lng2, lat2, meters])
+        row = cursor.fetchone()
+    return bool(row and row[0])
+
+
 class ReportSerializer(serializers.ModelSerializer):
     class Meta:
         model = Report
@@ -194,12 +208,12 @@ class AdminReportListView(APIView):
 
         reports = list(Report.objects.select_related("user").all().order_by("-created_at"))
         normal_reports = []
-        high_severity_zones = []
+        high_severity_reports = []
 
         for report in reports:
             metadata = get_cluster_metadata(report)
             if metadata["is_high_severity"]:
-                high_severity_zones.append(report)
+                high_severity_reports.append(report)
             else:
                 normal_reports.append(report)
 
@@ -208,11 +222,36 @@ class AdminReportListView(APIView):
 
         total_count = len(reports)
         normal_count = len(normal_reports)
-        high_severity_count = len(high_severity_zones)
+        unique_high_severity_zones = []
+
+        for report in high_severity_reports:
+            if report.latitude is None or report.longitude is None:
+                continue
+
+            is_duplicate_zone = False
+            for zone in unique_high_severity_zones:
+                if is_within_radius(
+                    report.latitude,
+                    report.longitude,
+                    zone["latitude"],
+                    zone["longitude"],
+                    POTHOLE_CLUSTER_RADIUS_METERS,
+                ):
+                    is_duplicate_zone = True
+                    break
+
+            if not is_duplicate_zone:
+                unique_high_severity_zones.append(
+                    {
+                        "latitude": report.latitude,
+                        "longitude": report.longitude,
+                    }
+                )
+
+        high_severity_count = len(unique_high_severity_zones)
 
         items = normal_reports[start:end]
         data = AdminReportSerializer(items, many=True).data
-        high_severity_data = AdminReportSerializer(high_severity_zones, many=True).data
         return Response(
             {
                 "count": normal_count,
@@ -221,7 +260,7 @@ class AdminReportListView(APIView):
                 "page_size": page_size,
                 "results": data,
                 "high_severity_count": high_severity_count,
-                "high_severity_zones": high_severity_data,
+                "high_severity_zones": unique_high_severity_zones,
             },
             status=status.HTTP_200_OK,
         )
