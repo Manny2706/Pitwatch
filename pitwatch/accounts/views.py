@@ -129,6 +129,8 @@ class UserLoginView(APIView):
 					"email": user.email,
 					"is_superuser": user.is_superuser,
 					"is_staff": user.is_staff,
+					"refresh": str(refresh),
+					"access": str(access),
 				},
 			},
 			status=status.HTTP_200_OK,
