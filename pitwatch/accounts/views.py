@@ -42,6 +42,8 @@ class SignupView(APIView):
 	def post(self, request, version=None):
 		serializer = UserSignupSerializer(data=request.data)
 		serializer.is_valid(raise_exception=True)
+		refresh_token = RefreshToken.for_user(serializer.validated_data["user"])
+		access_token = refresh_token.access_token
 		user = serializer.save()
 		return Response(
 			{
@@ -50,6 +52,8 @@ class SignupView(APIView):
 				"email": user.email,
 				"is_superuser": user.is_superuser,
 				"is_staff": user.is_staff,
+				"refresh": str(refresh_token),
+				"access": str(access_token),
 			},
 			status=status.HTTP_201_CREATED,
 		)
