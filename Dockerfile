@@ -20,4 +20,4 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY . /app
 
-CMD ["gunicorn", "pitwatch.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]
+CMD ["gunicorn", "pitwatch.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2"]
