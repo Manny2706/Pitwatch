@@ -143,7 +143,6 @@ def build_authority_email_text(context):
 
 def send_authority_notification(report, authority_data):
     recipient = authority_data.get("authority_email") or ""
-    authority_name = authority_data.get("authority") or "Unknown"
 
     if not recipient:
         return False

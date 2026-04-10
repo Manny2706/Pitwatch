@@ -123,7 +123,7 @@ class ReportSerializer(serializers.ModelSerializer):
 class AdminReportSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
     cluster_count = serializers.SerializerMethodField()
-    severity = serializers.SerializerMethodField()
+    cluster_severity = serializers.SerializerMethodField()
     is_high_severity = serializers.SerializerMethodField()
 
     class Meta:
