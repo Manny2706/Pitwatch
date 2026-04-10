@@ -1,3 +1,4 @@
+import logging
 import os
 
 from django.db import connection
@@ -10,6 +11,8 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from .models import Report
 from .utils.road_authority import get_road_authority, send_authority_notification
+
+logger = logging.getLogger(__name__)
 
 POTHOLE_CLUSTER_RADIUS_METERS = int(os.getenv("POTHOLE_CLUSTER_RADIUS_METERS", "130"))
 POTHOLE_CLUSTER_THRESHOLD = int(os.getenv("POTHOLE_CLUSTER_THRESHOLD", "8"))
@@ -200,12 +203,16 @@ class ReportListCreateView(APIView):
             road_authority_email=road_authority_data.get("authority_email"),
         )
 
+        notification_sent = False
         try:
             send_authority_notification(report, road_authority_data)
+            notification_sent = True
         except Exception:
-            return Response("Report created but failed to send notification to road authority.", status=status.HTTP_201_CREATED)
+            logger.exception("Failed to send pothole report notification for report_id=%s", report.id)
 
-        return Response(ReportSerializer(report).data, status=status.HTTP_201_CREATED)
+        response_data = ReportSerializer(report).data
+        response_data["notification_sent"] = notification_sent
+        return Response(response_data, status=status.HTTP_201_CREATED)
 
 
 class AdminReportListView(APIView):
