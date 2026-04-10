@@ -170,12 +170,14 @@ class ReportListCreateView(APIView):
 
         latitude = serializer.validated_data.get("latitude")
         longitude = serializer.validated_data.get("longitude")
+        
         existing_report = get_report_within_distance(latitude, longitude, meters=10)
         if existing_report:
             return Response(
                 {
                     "detail": "A report already exists within 10 meters of this location.",
                     "report": ReportSerializer(existing_report).data,
+                    
                 },
                 status=status.HTTP_200_OK,
             )
@@ -290,8 +292,12 @@ class NearbyReportsView(APIView):
             return Response({"detail": "lat/lng out of range."}, status=status.HTTP_400_BAD_REQUEST)
 
         cluster_count = get_pothole_cluster_count(lat, lng)
-        warning = cluster_count > POTHOLE_CLUSTER_THRESHOLD
-
+        if cluster_count > POTHOLE_CLUSTER_THRESHOLD:
+            warning = "High"
+        elif cluster_count > 0:
+            warning = "Moderate"
+        else:
+            warning = "None"
         if radius_km is None:
             query = """
                 SELECT id, title, status, created_at,
