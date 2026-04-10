@@ -445,4 +445,66 @@ class GetCount(APIView):
 
         counts = qs.values("status").annotate(count=Count("id"))
         data = {item["status"]: item["count"] for item in counts}
-        return Response(data, status=status.HTTP_200_OK)    
+        return Response(data, status=status.HTTP_200_OK)   
+    
+class EmergencyView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, version=None):
+        access_token = request.data.get("access_token")
+        recipient_mail = request.data.get("recipient_email")
+        if access_token:
+            jwt_authenticator = JWTAuthentication()
+            try:
+                validated_token = jwt_authenticator.get_validated_token(access_token)
+                user = jwt_authenticator.get_user(validated_token)
+            except Exception:
+                user = None
+        else:
+            user = None
+
+        latitude = request.data.get("latitude") or None
+        longitude = request.data.get("longitude") or None
+        title = request.data.get("title", "Emergency Report") or "Emergency Report"
+        description = request.data.get("description", "Emergency report") or "Emergency report"
+
+        if latitude is None or longitude is None:
+            return Response({"detail": "latitude and longitude are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Build a transient report object for notification payload only.
+        report = Report(
+            user=user,
+            title=title,
+            description=description,
+            status=Report.STATUS_PENDING,
+            latitude=latitude,
+            longitude=longitude,
+        )
+        report.created_at = timezone.now()
+
+        notification_sent = False
+        # Send mail to recipient if provided with location/details.
+        if recipient_mail:
+            authority_data = {
+                "authority": "Emergency Contact",
+                "authority_email": recipient_mail,
+                "city": "N/A",
+                "tags": {},
+            }
+            try:
+                send_authority_notification(report, authority_data)
+                notification_sent = True
+            except Exception:
+                logger.exception("Failed to send emergency notification")
+
+        response_data = {
+            "title": report.title,
+            "description": report.description,
+            "status": report.status,
+            "latitude": report.latitude,
+            "longitude": report.longitude,
+            "recipient_email": recipient_mail,
+            "notification_sent": notification_sent,
+            "saved": False,
+        }
+        return Response(response_data, status=status.HTTP_200_OK)
