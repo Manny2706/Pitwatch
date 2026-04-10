@@ -107,6 +107,7 @@ def build_authority_email_context(report, authority_data):
         "city": authority_data.get("city") or "N/A",
         "tags": authority_data.get("tags") or {},
         "map_url": map_url,
+        "pothole_severity": report.pothole_severity or "N/A",
         "severity_label": severity_label,
         "severity_badge": severity_badge,
         "reporter_name": getattr(report.user, "username", "Anonymous"),

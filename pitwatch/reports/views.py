@@ -207,6 +207,7 @@ class ReportListCreateView(APIView):
         road_authority_data = get_road_authority(latitude, longitude)
         report = serializer.save(
             user=request.user,
+            pothole_severity=road_authority_data.get("severity"),
             road_authority=road_authority_data.get("authority"),
             road_authority_email=road_authority_data.get("authority_email"),
         )
