@@ -12,7 +12,6 @@ from rest_framework_simplejwt.exceptions import InvalidToken
 from accounts.authentication import CookieJWTAuthentication
 from reports.models import Report
 
-
 class DashboardSummaryView(APIView):
     permission_classes = [AllowAny]
 

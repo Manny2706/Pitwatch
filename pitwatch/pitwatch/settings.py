@@ -5,7 +5,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -145,3 +145,12 @@ SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 SECURE_SSL_REDIRECT = not DEBUG
 SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "False").lower() == "true"
+
+# Email (Brevo API)
+BREVO_API_URL = os.getenv("BREVO_API_URL", "https://api.brevo.com/v3/smtp/email")
+BREVO_API_KEY = os.getenv("BREVO_API_KEY", "")
+BREVO_SENDER_EMAIL = os.getenv("BREVO_SENDER_EMAIL", "")
+BREVO_SENDER_NAME = os.getenv("BREVO_SENDER_NAME", "PitWatch")
+
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", BREVO_SENDER_EMAIL or "no-reply@pitwatch.local")
+SERVER_EMAIL = os.getenv("SERVER_EMAIL", DEFAULT_FROM_EMAIL)
