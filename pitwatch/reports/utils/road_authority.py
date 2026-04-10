@@ -141,9 +141,47 @@ def build_authority_email_text(context):
     )
 
 
-def send_authority_notification(report, authority_data):
-    recipient = authority_data.get("authority_email") or ""
+def build_emergency_email_context(report, authority_data):
+    map_url = None
+    if report.latitude is not None and report.longitude is not None:
+        map_url = "https://www.google.com/maps/search/?" + urlencode(
+            {"api": 1, "query": f"{report.latitude},{report.longitude}"}
+        )
 
+    return {
+        "report": report,
+        "authority": authority_data.get("authority") or "Emergency Contact",
+        "authority_email": authority_data.get("authority_email") or "",
+        "city": authority_data.get("city") or "N/A",
+        "map_url": map_url,
+        "reporter_name": getattr(report.user, "username", "Anonymous"),
+        "reporter_email": getattr(report.user, "email", "N/A"),
+        "reporter_id": getattr(report.user, "id", "N/A"),
+    }
+
+
+def build_emergency_email_text(context):
+    report = context["report"]
+    return (
+        "PitWatch emergency help request\n\n"
+        f"Recipient: {context['authority']}\n"
+        f"Recipient Email: {context['authority_email'] or 'N/A'}\n"
+        f"City: {context['city']}\n"
+        f"Request ID: {report.id}\n"
+        f"Title: {report.title}\n"
+        f"Description: {report.description or 'N/A'}\n"
+        f"Status: {report.status}\n"
+        f"Latitude: {report.latitude}\n"
+        f"Longitude: {report.longitude}\n"
+        f"Created At: {report.created_at}\n"
+        f"Requester ID: {context['reporter_id']}\n"
+        f"Requester Name: {context['reporter_name']}\n"
+        f"Requester Email: {context['reporter_email']}\n"
+        f"Google Maps: {context['map_url'] or 'N/A'}\n"
+    )
+
+
+def send_brevo_email(recipient, subject, html_content, text_content):
     if not recipient:
         return False
 
@@ -154,13 +192,6 @@ def send_authority_notification(report, authority_data):
 
     if not api_key or not sender_email:
         return False
-
-    context = build_authority_email_context(report, authority_data)
-    html_content = render_to_string("reports/email/pothole_report.html", context)
-    text_content = build_authority_email_text(context)
-
-    subject_prefix = "HIGH SEVERITY" if context.get("severity_badge") == "high" else "NEW"
-    subject = f"PitWatch {subject_prefix} pothole report: {report.title}"
 
     payload = {
         "sender": {"name": sender_name, "email": sender_email},
@@ -182,3 +213,27 @@ def send_authority_notification(report, authority_data):
     )
     response.raise_for_status()
     return True
+
+
+def send_authority_notification(report, authority_data):
+    recipient = authority_data.get("authority_email") or ""
+
+    context = build_authority_email_context(report, authority_data)
+    html_content = render_to_string("reports/email/pothole_report.html", context)
+    text_content = build_authority_email_text(context)
+
+    subject_prefix = "HIGH SEVERITY" if context.get("severity_badge") == "high" else "NEW"
+    subject = f"PitWatch {subject_prefix} pothole report: {report.title}"
+
+    return send_brevo_email(recipient, subject, html_content, text_content)
+
+
+def send_emergency_notification(report, authority_data):
+    recipient = authority_data.get("authority_email") or ""
+
+    context = build_emergency_email_context(report, authority_data)
+    html_content = render_to_string("reports/email/emergency_report.html", context)
+    text_content = build_emergency_email_text(context)
+    subject = f"PitWatch EMERGENCY help request: {report.title}"
+
+    return send_brevo_email(recipient, subject, html_content, text_content)

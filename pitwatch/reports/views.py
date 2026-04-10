@@ -12,7 +12,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from .models import Report
-from .utils.road_authority import get_road_authority, send_authority_notification
+from .utils.road_authority import get_road_authority, send_authority_notification, send_emergency_notification
 
 logger = logging.getLogger(__name__)
 
@@ -517,7 +517,7 @@ class EmergencyView(APIView):
                 "tags": {},
             }
             try:
-                notification_sent = bool(send_authority_notification(report, authority_data))
+                notification_sent = bool(send_emergency_notification(report, authority_data))
                 if not notification_sent:
                     notification_error = (
                         "Notification was not sent. Check BREVO_API_KEY and BREVO_SENDER_EMAIL configuration."
