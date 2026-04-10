@@ -151,16 +151,11 @@ class AdminTokenRefreshView(APIView):
 		except TokenError:
 			return Response({"detail": "Invalid refresh token."}, status=status.HTTP_401_UNAUTHORIZED)
 
-		response = Response({"detail": "Token refreshed."}, status=status.HTTP_200_OK)
-		response.set_cookie(
-			key="access_token",
-			value=new_access,
-			max_age=int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds()),
-			httponly=True,
-			secure=settings.JWT_COOKIE_SECURE,
-			samesite=settings.JWT_COOKIE_SAMESITE,
-			path="/",
-		)
+		response = Response({"detail": "Token refreshed.",
+                       "access_token": new_access,
+                       },
+                      status=status.HTTP_200_OK)
+		
 		return response
 
 

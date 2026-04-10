@@ -3,33 +3,50 @@ from django.db.models import Count, Q
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import InvalidToken
 
 from accounts.authentication import CookieJWTAuthentication
 from reports.models import Report
 
 
-class CookieOnlyJWTAuthentication(CookieJWTAuthentication):
-    def authenticate(self, request):
-        raw_token = request.COOKIES.get("access_token")
-        if raw_token is None:
-            return None
-
-        validated_token = self.get_validated_token(raw_token)
-        return self.get_user(validated_token), validated_token
-
-
 class DashboardSummaryView(APIView):
-    authentication_classes = [CookieOnlyJWTAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
+
+    def _authenticate_from_header(self, request):
+        auth_header = request.META.get("HTTP_AUTHORIZATION", "")
+        if not auth_header.startswith("Bearer "):
+            return None, Response(
+                {"detail": "Authorization header missing or invalid."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        raw_token = auth_header.split(" ", 1)[1].strip()
+        authenticator = CookieJWTAuthentication()
+
+        try:
+            validated_token = authenticator.get_validated_token(raw_token)
+            user = authenticator.get_user(validated_token)
+        except (InvalidToken, AuthenticationFailed):
+            return None, Response(
+                {"detail": "Invalid or expired access token."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        return user, None
 
     def get(self, request, version=None):
-        if not request.user.is_superuser:
+        user, error_response = self._authenticate_from_header(request)
+        if error_response:
+            return error_response
+
+        if not user.is_superuser:
             return Response(
                 {"detail": "Unauthorized. Superuser access required."},
-                status=status.HTTP_401_UNAUTHORIZED,
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         cache_key = "dashboard:summary:v1"
