@@ -9,6 +9,34 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from .models import Report
 
 
+def get_report_within_distance(latitude, longitude, meters=10):
+    if latitude is None or longitude is None:
+        return None
+
+    query = """
+        SELECT id
+        FROM reports_report
+        WHERE latitude IS NOT NULL
+          AND longitude IS NOT NULL
+          AND ST_DWithin(
+              ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography,
+              ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography,
+              %s
+          )
+        ORDER BY created_at DESC
+        LIMIT 1
+    """
+
+    with connection.cursor() as cursor:
+        cursor.execute(query, [longitude, latitude, meters])
+        row = cursor.fetchone()
+
+    if not row:
+        return None
+
+    return Report.objects.filter(id=row[0]).first()
+
+
 class ReportSerializer(serializers.ModelSerializer):
     class Meta:
         model = Report
@@ -57,6 +85,19 @@ class ReportListCreateView(APIView):
     def post(self, request, version=None):
         serializer = ReportSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
+        latitude = serializer.validated_data.get("latitude")
+        longitude = serializer.validated_data.get("longitude")
+        existing_report = get_report_within_distance(latitude, longitude, meters=10)
+        if existing_report:
+            return Response(
+                {
+                    "detail": "A report already exists within 10 meters of this location.",
+                    "report": ReportSerializer(existing_report).data,
+                },
+                status=status.HTTP_200_OK,
+            )
+
         report = serializer.save(user=request.user)
         return Response(ReportSerializer(report).data, status=status.HTTP_201_CREATED)
 
