@@ -337,7 +337,7 @@ class NearbyReportsView(APIView):
             warning = "None"
         if radius_km is None:
             query = """
-                SELECT id, title, status, created_at,
+                SELECT id, title, status, created_at, latitude, longitude,
                        ST_Distance(
                            ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography,
                            ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography
@@ -353,7 +353,7 @@ class NearbyReportsView(APIView):
         else:
             radius_m = radius_km * 1000
             query = """
-                SELECT id, title, status, created_at,
+                SELECT id, title, status, created_at, latitude, longitude,
                        ST_Distance(
                            ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography,
                            ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography
@@ -382,7 +382,9 @@ class NearbyReportsView(APIView):
                 "title": r[1],
                 "status": r[2],
                 "created_at": r[3],
-                "distance_m": float(r[4]),
+                "latitude": float(r[4]) if r[4] is not None else None,
+                "longitude": float(r[5]) if r[5] is not None else None,
+                "distance_m": float(r[6]),
             }
             for r in rows
         ]
