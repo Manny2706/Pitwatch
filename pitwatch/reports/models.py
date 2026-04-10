@@ -29,6 +29,7 @@ class Report(models.Model):
     longitude = models.FloatField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
+    
 
     class Meta:
         indexes = [

@@ -1,3 +1,5 @@
+import os
+
 from django.db import connection
 from django.db.models import Count
 from django.utils import timezone
@@ -7,6 +9,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from .models import Report
+
+
+POTHOLE_CLUSTER_RADIUS_METERS = int(os.getenv("POTHOLE_CLUSTER_RADIUS_METERS", "130"))
+POTHOLE_CLUSTER_THRESHOLD = int(os.getenv("POTHOLE_CLUSTER_THRESHOLD", "8"))
 
 
 def get_report_within_distance(latitude, longitude, meters=10):
@@ -37,6 +43,44 @@ def get_report_within_distance(latitude, longitude, meters=10):
     return Report.objects.filter(id=row[0]).first()
 
 
+def get_pothole_cluster_count(latitude, longitude, meters=POTHOLE_CLUSTER_RADIUS_METERS):
+    if latitude is None or longitude is None:
+        return 0
+
+    query = """
+        SELECT COUNT(*)
+        FROM reports_report
+        WHERE latitude IS NOT NULL
+          AND longitude IS NOT NULL
+          AND status <> %s
+          AND ST_DWithin(
+              ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography,
+              ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography,
+              %s
+          )
+    """
+
+    with connection.cursor() as cursor:
+        cursor.execute(query, [Report.STATUS_REJECTED, longitude, latitude, meters])
+        row = cursor.fetchone()
+
+    return int(row[0]) if row and row[0] is not None else 0
+
+
+def get_cluster_metadata(report):
+    metadata = getattr(report, "_cluster_metadata", None)
+    if metadata is None:
+        cluster_count = get_pothole_cluster_count(report.latitude, report.longitude)
+        is_high_severity = cluster_count > POTHOLE_CLUSTER_THRESHOLD
+        metadata = {
+            "cluster_count": cluster_count,
+            "severity": "high" if is_high_severity else "normal",
+            "is_high_severity": is_high_severity,
+        }
+        report._cluster_metadata = metadata
+    return metadata
+
+
 class ReportSerializer(serializers.ModelSerializer):
     class Meta:
         model = Report
@@ -46,10 +90,25 @@ class ReportSerializer(serializers.ModelSerializer):
 
 class AdminReportSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
+    cluster_count = serializers.SerializerMethodField()
+    severity = serializers.SerializerMethodField()
+    is_high_severity = serializers.SerializerMethodField()
 
     class Meta:
         model = Report
-        fields = ["id", "user", "title", "description", "status", "latitude", "longitude", "created_at"]
+        fields = [
+            "id",
+            "user",
+            "title",
+            "description",
+            "status",
+            "latitude",
+            "longitude",
+            "created_at",
+            "cluster_count",
+            "severity",
+            "is_high_severity",
+        ]
 
     def get_user(self, obj):
         if not obj.user:
@@ -60,6 +119,15 @@ class AdminReportSerializer(serializers.ModelSerializer):
             "email": obj.user.email,
             "is_staff": obj.user.is_staff,
         }
+
+    def get_cluster_count(self, obj):
+        return get_cluster_metadata(obj)["cluster_count"]
+
+    def get_severity(self, obj):
+        return get_cluster_metadata(obj)["severity"]
+
+    def get_is_high_severity(self, obj):
+        return get_cluster_metadata(obj)["is_high_severity"]
 
 
 class ReportListCreateView(APIView):
@@ -103,9 +171,15 @@ class ReportListCreateView(APIView):
 
 
 class AdminReportListView(APIView):
-    permission_classes = [IsAdminUser]
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, version=None):
+        if not request.user.is_superuser:
+            return Response(
+                {"detail": "Unauthorized. Superuser access required."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         page_size_raw = request.query_params.get("page_size", 25)
         page_raw = request.query_params.get("page", 1)
 
@@ -118,19 +192,36 @@ class AdminReportListView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        qs = Report.objects.select_related("user").all().order_by("-created_at")
+        reports = list(Report.objects.select_related("user").all().order_by("-created_at"))
+        normal_reports = []
+        high_severity_zones = []
+
+        for report in reports:
+            metadata = get_cluster_metadata(report)
+            if metadata["is_high_severity"]:
+                high_severity_zones.append(report)
+            else:
+                normal_reports.append(report)
+
         start = (page - 1) * page_size
         end = start + page_size
 
-        total = qs.count()
-        items = qs[start:end]
+        total_count = len(reports)
+        normal_count = len(normal_reports)
+        high_severity_count = len(high_severity_zones)
+
+        items = normal_reports[start:end]
         data = AdminReportSerializer(items, many=True).data
+        high_severity_data = AdminReportSerializer(high_severity_zones, many=True).data
         return Response(
             {
-                "count": total,
+                "count": normal_count,
+                "total_count": total_count,
                 "page": page,
                 "page_size": page_size,
                 "results": data,
+                "high_severity_count": high_severity_count,
+                "high_severity_zones": high_severity_data,
             },
             status=status.HTTP_200_OK,
         )
@@ -156,6 +247,9 @@ class NearbyReportsView(APIView):
 
         if not (-90 <= lat <= 90 and -180 <= lng <= 180):
             return Response({"detail": "lat/lng out of range."}, status=status.HTTP_400_BAD_REQUEST)
+
+        cluster_count = get_pothole_cluster_count(lat, lng)
+        warning = cluster_count > POTHOLE_CLUSTER_THRESHOLD
 
         if radius_km is None:
             query = """
@@ -208,7 +302,15 @@ class NearbyReportsView(APIView):
             }
             for r in rows
         ]
-        return Response(data, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "warning": warning,
+                "cluster_count": cluster_count,
+                "threshold": POTHOLE_CLUSTER_THRESHOLD,
+                "results": data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class ReportStatusUpdateView(APIView):
