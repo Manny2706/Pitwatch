@@ -29,6 +29,7 @@ def get_report_within_distance(latitude, longitude, meters=10):
         FROM reports_report
         WHERE latitude IS NOT NULL
           AND longitude IS NOT NULL
+          AND status NOT IN (%s, %s)
           AND ST_DWithin(
               ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography,
               ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography,
@@ -39,7 +40,10 @@ def get_report_within_distance(latitude, longitude, meters=10):
     """
 
     with connection.cursor() as cursor:
-        cursor.execute(query, [longitude, latitude, meters])
+        cursor.execute(
+            query,
+            [Report.STATUS_REJECTED, Report.STATUS_RESOLVED, longitude, latitude, meters],
+        )
         row = cursor.fetchone()
 
     if not row:
@@ -194,7 +198,7 @@ class ReportListCreateView(APIView):
         longitude = serializer.validated_data.get("longitude")
         severity = serializer.validated_data.get("pothole_severity") or request.data.get("pothole_severity")
         existing_report = get_report_within_distance(latitude, longitude, meters=10)
-        if existing_report:
+        if existing_report :
             return Response(
                 {
                     "detail": "A report already exists within 10 meters of this location.",
@@ -214,6 +218,7 @@ class ReportListCreateView(APIView):
         notification_sent = False
         try:
             notification_sent = bool(send_authority_notification(report, road_authority_data))
+            logger.info("Pothole report notification sent for report_id=%s TO %s", report.id, road_authority_data.get("authority_email"))
         except Exception:
             logger.exception("Failed to send pothole report notification for report_id=%s", report.id)
 
