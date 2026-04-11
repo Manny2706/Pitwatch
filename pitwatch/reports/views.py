@@ -192,7 +192,7 @@ class ReportListCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         latitude = serializer.validated_data.get("latitude")
         longitude = serializer.validated_data.get("longitude")
-        severity = serializer.validated_data.get("pothole_severity")
+        severity = serializer.validated_data.get("pothole_severity") or request.data.get("pothole_severity")
         existing_report = get_report_within_distance(latitude, longitude, meters=10)
         if existing_report:
             return Response(
@@ -209,7 +209,6 @@ class ReportListCreateView(APIView):
             pothole_severity=severity,
             road_authority=road_authority_data.get("authority"),
             road_authority_email=road_authority_data.get("authority_email"),
-            
         )
 
         notification_sent = False
