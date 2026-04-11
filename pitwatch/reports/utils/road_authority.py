@@ -13,6 +13,7 @@ AUTHORITY_EMAILS = {
     "NHAI": os.getenv("AUTHORITY_EMAIL_NHAI", "anshul24154079@akgec.ac.in"),
     "State PWD": os.getenv("AUTHORITY_EMAIL_STATE_PWD", "23kushwahaakash@gmail.com"),
     "Municipal Authority": os.getenv("AUTHORITY_EMAIL_MUNICIPAL_AUTHORITY", "vivekyadav00681@gmail.com"),
+    "Municipal Corporation": os.getenv("AUTHORITY_EMAIL_MUNICIPAL_CORPORATION", "mayanktriptahi7861@gmail.com"),
     "Unknown": os.getenv("AUTHORITY_EMAIL_UNKNOWN", "mayankgupta270606@gmail.com"),
 }
 
