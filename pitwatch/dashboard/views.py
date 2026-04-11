@@ -48,11 +48,6 @@ class DashboardSummaryView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        cache_key = "dashboard:summary:v1"
-        cached = cache.get(cache_key)
-        if cached:
-            return Response(cached)
-
         totals = Report.objects.aggregate(
             total_reports=Count("id"),
             resolved=Count("id", filter=Q(status=Report.STATUS_RESOLVED)),
@@ -74,5 +69,4 @@ class DashboardSummaryView(APIView):
             "totals": totals,
             "trend_last_7_days": list(daily_qs),
         }
-        cache.set(cache_key, payload, 300)
         return Response(payload)
