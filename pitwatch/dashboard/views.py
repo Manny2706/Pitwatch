@@ -14,7 +14,7 @@ from reports.models import Report
 
 class DashboardSummaryView(APIView):
     permission_classes = [AllowAny]
-
+    throttle_scope = "dashboard_summary"
     def _authenticate_from_header(self, request):
         auth_header = request.META.get("HTTP_AUTHORIZATION", "")
         if not auth_header.startswith("Bearer "):
@@ -34,11 +34,31 @@ class DashboardSummaryView(APIView):
                 {"detail": "Invalid or expired access token."},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
-
+        
         return user, None
+    def _authenticate_from_cookie(self, request):
+        access_token = request.COOKIES.get("access_token")
+        if not access_token:
+            return None, Response(
+                {"detail": "Access token cookie missing."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
 
+        authenticator = CookieJWTAuthentication()
+
+        try:
+            validated_token = authenticator.get_validated_token(access_token)
+            user = authenticator.get_user(validated_token)
+        except (InvalidToken, AuthenticationFailed):
+            return None, Response(
+                {"detail": "Invalid or expired access token in cookie."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        
+        return user, None
+    
     def get(self, request, version=None):
-        user, error_response = self._authenticate_from_header(request)
+        user, error_response = self._authenticate_from_header(request) or self._authenticate_from_cookie(request)
         if error_response:
             return error_response
 

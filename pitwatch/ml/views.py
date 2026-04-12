@@ -1,9 +1,10 @@
 import base64
 
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 
 from reports.models import Report
 
@@ -12,7 +13,20 @@ from .services.model import InvalidImageError, PredictionError, predict_from_fil
 from .tasks import run_pothole_inference
 
 
+class PublicDetectThrottle(ScopedRateThrottle):
+    scope = "ml_public_detect"
+
+
+class SubmitDetectThrottle(ScopedRateThrottle):
+    scope = "ml_submit"
+
+
+class DetectStatusThrottle(ScopedRateThrottle):
+    scope = "ml_status"
+
+
 @api_view(["POST"])
+@throttle_classes([PublicDetectThrottle])
 @permission_classes([AllowAny])
 def detect_pothole(request, version=None):
     image_file = request.FILES.get("image")
@@ -36,6 +50,7 @@ def detect_pothole(request, version=None):
 
 
 @api_view(["POST"])
+@throttle_classes([SubmitDetectThrottle])
 @permission_classes([IsAuthenticated])
 def submit_detect_pothole(request, version=None):
     image_file = request.FILES.get("image")
@@ -88,6 +103,7 @@ def submit_detect_pothole(request, version=None):
 
 
 @api_view(["GET"])
+@throttle_classes([DetectStatusThrottle])
 @permission_classes([IsAuthenticated])
 def detect_status(request, task_id, version=None):
     job = InferenceJob.objects.filter(task_id=task_id, submitted_by=request.user).first()

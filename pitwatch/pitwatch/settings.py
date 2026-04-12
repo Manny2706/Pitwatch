@@ -110,6 +110,25 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.ScopedRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": os.getenv("DRF_ANON_THROTTLE_RATE", "60/min"),
+        "user": os.getenv("DRF_USER_THROTTLE_RATE", "600/min"),
+        "auth_login": os.getenv("DRF_AUTH_LOGIN_THROTTLE_RATE", "5/min"),
+        "auth_signup": os.getenv("DRF_AUTH_SIGNUP_THROTTLE_RATE", "3/hour"),
+        "auth_refresh": os.getenv("DRF_AUTH_REFRESH_THROTTLE_RATE", "30/min"),
+        "ml_public_detect": os.getenv("DRF_ML_PUBLIC_DETECT_THROTTLE_RATE", "10/min"),
+        "ml_submit": os.getenv("DRF_ML_SUBMIT_THROTTLE_RATE", "20/min"),
+        "ml_status": os.getenv("DRF_ML_STATUS_THROTTLE_RATE", "60/min"),
+        "reports": os.getenv("DRF_REPORTS_THROTTLE_RATE", "100/min"),
+        "admin_reports_list": os.getenv("DRF_ADMIN_REPORTS_LIST_THROTTLE_RATE", "50/min"),
+        "dashboard_summary": os.getenv("DRF_DASHBOARD_SUMMARY_THROTTLE_RATE", "20/min"),
+        
+},
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 25,
 }

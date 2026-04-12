@@ -1,12 +1,12 @@
 import logging
 import os
-
+from .serializers import ReportSerializer, AdminReportSerializer
 from django.db import connection
 from django.db.models import Count
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
 from django.utils import timezone
-from rest_framework import serializers, status
+from rest_framework import  status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -104,74 +104,11 @@ def is_within_radius(lat1, lng1, lat2, lng2, meters):
     return bool(row and row[0])
 
 
-class ReportSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Report
-        fields = [
-            "id",
-            "user",
-            "title",
-            "description",
-            "status",
-            "latitude",
-            "longitude",
-            "road_authority",
-            "road_authority_email",
-            "created_at",
-            "resolved_at",
-            "road_authority",
-            "road_authority_email",
-            "pothole_severity",
-        ]
-        read_only_fields = ["id", "user", "created_at"]
-
-
-class AdminReportSerializer(serializers.ModelSerializer):
-    user = serializers.SerializerMethodField()
-    cluster_count = serializers.SerializerMethodField()
-    cluster_severity = serializers.SerializerMethodField()
-    is_high_severity = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Report
-        fields = [
-            "id",
-            "user",
-            "title",
-            "description",
-            "status",
-            "latitude",
-            "longitude",
-            "road_authority",
-            "road_authority_email",
-            "created_at",
-            "cluster_count",
-            "cluster_severity",
-            "is_high_severity",
-            "pothole_severity",
-        ]
-
-    def get_user(self, obj):
-        if not obj.user:
-            return None
-        return {
-            "id": obj.user_id,
-            "username": obj.user.username,
-            "email": obj.user.email,
-            "is_staff": obj.user.is_staff,
-        }
-
-    def get_cluster_count(self, obj):
-        return get_cluster_metadata(obj)["cluster_count"]
-
-    def get_cluster_severity(self, obj):
-        return get_cluster_metadata(obj)["cluster_severity"]
-
-    def get_is_high_severity(self, obj):
-        return get_cluster_metadata(obj)["is_high_severity"]
-
 
 class ReportListCreateView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    throttle_scope = "reports"
     def get(self, request, version=None):
         qs = Report.objects.exclude(status=Report.STATUS_REJECTED).filter(user=request.user).order_by("-created_at")
         page_size = int(request.query_params.get("page_size", 25))
@@ -230,7 +167,7 @@ class ReportListCreateView(APIView):
 class AdminReportListView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
-
+    throttle_scope = "admin_reports_list"
     def get(self, request, version=None):
         if not request.user.is_superuser:
             return Response(
@@ -312,6 +249,11 @@ class AdminReportListView(APIView):
 
 
 class NearbyReportsView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    throttle_scope = "reports"
+
+
     def get(self, request, version=None):
         lat_raw = request.query_params.get("lat")
         lng_raw = request.query_params.get("lng")
@@ -406,6 +348,7 @@ class NearbyReportsView(APIView):
 class ReportStatusUpdateView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
+    throttle_scope = "admin_reports_list"
 
     def patch(self, request, report_id, version=None):
         if not request.user.is_superuser:
@@ -445,6 +388,7 @@ class ReportStatusUpdateView(APIView):
 class GetCount(APIView):
     # This endpoint is for the users to get counts of reports by status by them self
     permission_classes = [AllowAny]
+    throttle_scope = "reports"
 
     def get(self, request, version=None):
         qs = Report.objects.all()
@@ -456,7 +400,9 @@ class GetCount(APIView):
         return Response(data, status=status.HTTP_200_OK)   
     
 class EmergencyView(APIView):
+    
     permission_classes = [AllowAny]
+    throttle_scope = "reports"
 
     def post(self, request, version=None):
         access_token = request.data.get("access_token")

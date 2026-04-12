@@ -38,6 +38,7 @@ def _clear_auth_cookies(response):
 
 class SignupView(APIView):
 	permission_classes = [AllowAny]
+	throttle_scope = "auth_signup"
 
 	def post(self, request, version=None):
 		serializer = UserSignupSerializer(data=request.data)
@@ -45,7 +46,8 @@ class SignupView(APIView):
 		refresh_token = RefreshToken.for_user(serializer.validated_data["user"])
 		access_token = refresh_token.access_token
 		user = serializer.save()
-		return Response(
+
+		response = Response(
 			{
 				"id": user.id,
 				"username": user.username,
@@ -57,10 +59,13 @@ class SignupView(APIView):
 			},
 			status=status.HTTP_201_CREATED,
 		)
+		_set_auth_cookies(response, str(access_token), str(refresh_token))
+		return response
 
 
 class ProfileView(APIView):
 	permission_classes = [IsAuthenticated]
+	
 
 	def get(self, request, version=None):
 		user = request.user
@@ -79,6 +84,7 @@ class ProfileView(APIView):
 
 class AdminLoginView(APIView):
 	permission_classes = [AllowAny]
+	throttle_scope = "auth_login"
 
 	def post(self, request, version=None):
 		serializer = AdminLoginSerializer(data=request.data, context={"request": request})
@@ -109,6 +115,7 @@ class AdminLoginView(APIView):
 
 class UserLoginView(APIView):
 	permission_classes = [AllowAny]
+	throttle_scope = "auth_login"
 
 	def post(self, request, version=None):
 		username = request.data.get("username")
@@ -145,6 +152,7 @@ class UserLoginView(APIView):
 
 class AdminTokenRefreshView(APIView):
 	permission_classes = [AllowAny]
+	throttle_scope = "auth_refresh"
 
 	def post(self, request, version=None):
     #  take refresh token in body 
@@ -170,7 +178,7 @@ class AdminLogoutView(APIView):
 	permission_classes = [AllowAny]
 
 	def post(self, request, version=None):
-		refresh_token = request.COOKIES.get("refresh_token")
+		refresh_token = request.COOKIES.get("refresh_token") or request.data.get("refresh_token")
 		if refresh_token:
 			try:
 				refresh = RefreshToken(refresh_token)
@@ -207,7 +215,7 @@ class AdminMeView(APIView):
 
 
 class UserLogoutView(APIView):
-	permission_classes = [AllowAny]
+	permission_classes = [IsAuthenticated]
 
 	def post(self, request, version=None):
 		refresh_token = request.data.get("refresh_token") or request.COOKIES.get("refresh_token")
@@ -226,20 +234,19 @@ class UserLogoutView(APIView):
 		return response
 
 class UserRefreshTokenView(APIView):
-	permission_classes = [AllowAny]
+	permission_classes = [IsAuthenticated]
+	throttle_scope = "auth_refresh"
 
 	def post(self, request, version=None):
 		refresh_token = request.COOKIES.get("refresh_token") or request.data.get("refresh_token")
-		if not refresh_token:
-			return Response({"detail": "Refresh token missing."}, status=status.HTTP_401_UNAUTHORIZED)
 
 		try:
 			refresh = RefreshToken(refresh_token)
 			new_access = str(refresh.access_token)
 		except TokenError:
 			return Response({"detail": "Invalid refresh token."}, status=status.HTTP_401_UNAUTHORIZED)
-
-		response = Response({"detail": "Token refreshed."}, status=status.HTTP_200_OK)
+		response = Response({"detail": "Token refreshed.",
+						     "access_token": new_access }, status=status.HTTP_200_OK)
 		response.set_cookie(
 			key="access_token",
 			value=new_access,
